@@ -10,7 +10,7 @@ using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 using System.Text;
 
-namespace PublicStealer.Utils
+namespace Shifting_Backrooms.Utils
 {
     public static class SystemInformation
     {

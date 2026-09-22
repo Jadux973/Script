@@ -163,7 +163,6 @@
     <Compile Include="Utils\Identity.cs" />
     <Compile Include="Utils\Security.cs" />
     <Compile Include="Utils\SkuldDelivery.cs" />
-    <Compile Include="Utils\SQLiteHandler.cs" />
     <Compile Include="Utils\SystemInformation.cs" />
     <Compile Include="Utils\TokenExtractor.cs" />
     <Compile Include="Utils\WebhookSender.cs" />

