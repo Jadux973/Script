@@ -1,0 +1,12 @@
+﻿<?xml version='1.0'?>
+<Obfuscator>
+	<Var name="InPath" value="." />
+	<Var name="OutPath" value=".\Obfuscated" />
+	<Var name="KeepPublicApi" value="false" />
+	<Var name="HideStrings" value="true" />
+	<Var name="RenameProperties" value="true" />
+	<Var name="RenameEvents" value="true" />
+	<Var name="RenameFields" value="true" />
+	<Var name="RenameMethods" value="false" />
+	<Module file="$(InPath)\Shifting_Backrooms.exe" />
+</Obfuscator>
